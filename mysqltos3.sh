@@ -19,17 +19,18 @@ TMP_PATH=~/
 DATESTAMP=$(date +".%m.%d.%Y")
 DAY=$(date +"%d")
 DAYOFWEEK=$(date +"%A")
-
+WEEK_PATH=weekly
+DAY_PATH=daily
 PERIOD=${1-day}
 if [ ${PERIOD} = "auto" ]; then
-	if [ ${DAY} = "01" ]; then
-        	PERIOD=month
-	elif [ ${DAYOFWEEK} = "Sunday" ]; then
+	if [ ${DAYOFWEEK} = "Saturday" ]; then
         	PERIOD=week
 	else
        		PERIOD=day
 	fi	
 fi
+/usr/local/bin/s3cmd expire s3://${S3BUCKET}  --expiry-days=91 --expiry-prefix=/${WEEK_PATH}
+/usr/local/bin/s3cmd expire s3://${S3BUCKET}  --expiry-days=15 --expiry-prefix=/${DAY_PATH}
 
 echo "Selected period: $PERIOD."
 
@@ -46,17 +47,22 @@ tar czf ${TMP_PATH}${FILENAME}${DATESTAMP}.tar.gz ${TMP_PATH}${FILENAME}.sql
 echo "Done compressing the backup file."
 
 # we want at least two backups, two months, two weeks, and two days
-echo "Removing old backup (2 ${PERIOD}s ago)..."
-s3cmd del --recursive s3://${S3BUCKET}/${S3PATH}previous_${PERIOD}/
-echo "Old backup removed."
-
-echo "Moving the backup from past $PERIOD to another folder..."
-s3cmd mv --recursive s3://${S3BUCKET}/${S3PATH}${PERIOD}/ s3://${S3BUCKET}/${S3PATH}previous_${PERIOD}/
-echo "Past backup moved."
+#echo "Removing old backup (2 ${PERIOD}s ago)..."
+#s3cmd del --recursive s3://${S3BUCKET}/${S3PATH}previous_${PERIOD}/
+#echo "Old backup removed."
+#
+#echo "Moving the backup from past $PERIOD to another folder..."
+#s3cmd mv --recursive s3://${S3BUCKET}/${S3PATH}${PERIOD}/ s3://${S3BUCKET}/${S3PATH}previous_${PERIOD}/
+#echo "Past backup moved."
 
 # upload all databases
 echo "Uploading the new backup..."
-s3cmd put -f ${TMP_PATH}${FILENAME}${DATESTAMP}.tar.gz s3://${S3BUCKET}/${S3PATH}${PERIOD}/
+if [ ${PERIOD} = "day" ]; then
+	/usr/local/bin/s3cmd put -f ${TMP_PATH}${FILENAME}${DATESTAMP}.tar.gz s3://${S3BUCKET}/${DAY_PATH}/
+else
+	/usr/local/bin/s3cmd put -f ${TMP_PATH}${FILENAME}${DATESTAMP}.tar.gz s3://${S3BUCKET}/${DAY_PATH}/
+	/usr/local/bin/s3cmd put -f ${TMP_PATH}${FILENAME}${DATESTAMP}.tar.gz s3://${S3BUCKET}/${WEEK_PATH}/
+fi
 echo "New backup uploaded."
 
 echo "Removing the cache files..."
